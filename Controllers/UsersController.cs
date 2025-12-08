@@ -9,6 +9,7 @@ using WebApplicationTest.DTO.DeleteUserDtos;
 using WebApplicationTest.DTO.RefreshTokenDto;
 using WebApplicationTest.DTO.RegisterDto;
 using WebApplicationTest.DTO.UserDtos;
+using WebApplicationTest.DTO.UserDtos.UserChangeDataDtos;
 using WebApplicationTest.Models;
 using WebApplicationTest.Services;
 
@@ -182,5 +183,79 @@ namespace WebApplicationTest.Controllers
             userDtos.Add(userDto);
             return Ok(userDtos);
         }
+
+        [HttpPost("change_password")]
+        [Authorize]
+        public async Task<ActionResult> UserChangePassword([FromBody] UserChangePasswordRequestDto userChangePasswordRequest)
+        {
+            var accessToken = _extractAccessTokenFromHeaderService.ExtractAccessTokenFromHeader(Request);
+            if (string.IsNullOrEmpty(accessToken))
+            {
+                return BadRequest("Попробуйте авторизироваться снова.");
+            }
+
+            var userId = _jwtService.GetUserIdFromToken(accessToken);
+            if (userId == null)
+            {
+                return BadRequest("Недействительный access token.");
+            }
+
+            var user = await _dbContext.Users.FindAsync(userId);
+            if (user == null)
+            {
+                return Unauthorized("Пользователь не найден. Попробуйте авторизоваться заново.");
+            }
+
+            if (!(HashingPasswordService.VerifyPassword(userChangePasswordRequest.OldPassword, user.Password)))
+            {
+                return BadRequest("Введен неверный текущий пароль.");
+            }
+            
+            if (!(userChangePasswordRequest.NewPassword.Equals(userChangePasswordRequest.ConfrirmNewPassword))) 
+            {
+                return BadRequest("Новые пароли не совпадают.");
+            }
+            user.Password = HashingPasswordService.HashPassword(userChangePasswordRequest.NewPassword);
+
+            await _dbContext.SaveChangesAsync();
+            return Ok("Вы успешно изменили пароль!");
+        }
+        [HttpPost("change_user_data")]
+        [Authorize]
+        public async Task<ActionResult<UserChangeDataResponseDto>> ChangeUserNameOrEmail(UserChangeDataRequestDto userChangeDataRequest)
+        {
+            var accessToken = _extractAccessTokenFromHeaderService.ExtractAccessTokenFromHeader(Request);
+            if (string.IsNullOrEmpty(accessToken))
+            {
+                return BadRequest("Попробуйте авторизироваться снова.");
+            }
+
+            var userId = _jwtService.GetUserIdFromToken(accessToken);
+            if (userId == null)
+            {
+                return BadRequest("Недействительный access token.");
+            }
+
+            var user = await _dbContext.Users.FindAsync(userId);
+            if (user == null)
+            {
+                return Unauthorized("Пользователь не найден. Попробуйте авторизоваться заново.");
+            }
+
+            if (!(HashingPasswordService.VerifyPassword(userChangeDataRequest.Password, user.Password)))
+            {
+                return BadRequest("Введен неверный пароль.");
+            }
+
+            user.Email = userChangeDataRequest.Email;
+            user.FullName = userChangeDataRequest.FullName;
+            await _dbContext.SaveChangesAsync();
+
+            UserChangeDataResponseDto userChangeDataResponse = new UserChangeDataResponseDto();
+            userChangeDataResponse.Email = user.Email;
+            userChangeDataResponse.FullName = user.FullName;
+            return Ok(userChangeDataResponse);
+        }  
+        
     }
 }

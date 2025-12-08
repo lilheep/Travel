@@ -5,7 +5,7 @@ namespace WebApplicationTest.DTO.AuthDto
 {
     public class AuthResponseDto
     {
-        [EmailAddress]
+        [EmailAddress(ErrorMessage = "Адрес электронной почты введен в невалидном формате!")]
         [JsonPropertyName("email")]
         public string Email { get; set; }
         [JsonPropertyName("full_name")]

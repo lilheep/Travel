@@ -5,7 +5,7 @@ namespace WebApplicationTest.DTO.RegisterDto
 {
     public class RegisterRequestDto
     {
-        [EmailAddress]
+        [EmailAddress(ErrorMessage = "Адрес электронной почты введен в невалидном формате!")]
         [JsonPropertyName("email")]
         public string Email { get; set; }
 
