@@ -11,7 +11,7 @@ namespace WebApplicationTest.DTO.RegisterDto
 
         [JsonPropertyName("full_name")]
         public string FullName { get; set; }
-
+        [MinLength(8, ErrorMessage = "Пароль должен состоять минимум из 8 символов.")]
         [JsonPropertyName("password")]
         public string Password { get; set; }
 

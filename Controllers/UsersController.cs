@@ -4,11 +4,11 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using WebApplicationTest.Data;
-using WebApplicationTest.DTO;
 using WebApplicationTest.DTO.AuthDto;
 using WebApplicationTest.DTO.DeleteUserDtos;
 using WebApplicationTest.DTO.RefreshTokenDto;
 using WebApplicationTest.DTO.RegisterDto;
+using WebApplicationTest.DTO.UserDtos;
 using WebApplicationTest.Models;
 using WebApplicationTest.Services;
 
@@ -44,7 +44,6 @@ namespace WebApplicationTest.Controllers
                 userDto.Trips = user.Trips;
                 userDto.Email = user.Email;
                 userDto.CreatedAt = user.CreatedAt;
-                userDto.Password = user.Password;
                 userDto.FullName = user.FullName;
                 userDtos.Add(userDto);
             }
@@ -64,11 +63,6 @@ namespace WebApplicationTest.Controllers
                 user.Email.Equals(registerRequestDto.Email)) != null)
             {
                 return BadRequest("Пользователь с таким email уже существует!");
-            }
-
-            if (registerRequestDto.Password.Length < 8)
-            {
-                return BadRequest("Длина пароля не должна быть менее 8 символов!");
             }
 
             User user = new User();
@@ -136,7 +130,7 @@ namespace WebApplicationTest.Controllers
                 return Unauthorized("Пользователь не найден. Попробуйте авторизоваться заново.");
             }
 
-            if (HashingPasswordService.VerifyPassword(user.Password, deleteUserRequest.Password))
+            if (!(HashingPasswordService.VerifyPassword(deleteUserRequest.Password, user.Password)))
             {
                 return BadRequest("Введен неверный пароль.");
             }
@@ -146,6 +140,7 @@ namespace WebApplicationTest.Controllers
                 user.IsDeleted = true;
                 user.DeletedDate = DateTime.UtcNow;
                 await _dbContext.SaveChangesAsync();
+                return Ok("Аккаунт успешно удален (с возможностью восстановления).");
 
             }
             _dbContext.Users.Attach(user);
@@ -153,7 +148,39 @@ namespace WebApplicationTest.Controllers
 
             await _dbContext.SaveChangesAsync();
             return Ok("Аккаунт успешно удален безвозвратно.");
-            
+
         }
-    } 
+        [HttpGet("get_profile")]
+        [Authorize]
+        public async Task<ActionResult<UserDto>> GetUserProfile()
+        {
+            var accessToken = _extractAccessTokenFromHeaderService.ExtractAccessTokenFromHeader(Request);
+            if (string.IsNullOrEmpty(accessToken))
+            {
+                return BadRequest("Попробуйте авторизироваться снова.");
+            }
+
+            var userId = _jwtService.GetUserIdFromToken(accessToken);
+            if (userId == null)
+            {
+                return BadRequest("Недействительный access token.");
+            }
+
+            var user = await _dbContext.Users.FindAsync(userId);
+            if (user == null)
+            {
+                return Unauthorized("Пользователь не найден. Попробуйте авторизоваться заново.");
+            }
+
+            List<UserDto> userDtos = new List<UserDto>();
+            UserDto userDto = new UserDto();
+            userDto.Id = user.Id;
+            userDto.Trips = user.Trips;
+            userDto.Email = user.Email;
+            userDto.CreatedAt = user.CreatedAt;
+            userDto.FullName = user.FullName;
+            userDtos.Add(userDto);
+            return Ok(userDtos);
+        }
+    }
 }
