@@ -2,7 +2,7 @@
 
 namespace WebApplicationTest.Services
 {
-    public class HashingRefreshToken
+    public class HashingRefreshTokenService
     {
         public static string HashRefreshToken(string token)
         {

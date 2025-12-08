@@ -6,6 +6,7 @@ using Microsoft.IdentityModel.Tokens;
 using WebApplicationTest.Data;
 using WebApplicationTest.DTO;
 using WebApplicationTest.DTO.AuthDto;
+using WebApplicationTest.DTO.DeleteUserDtos;
 using WebApplicationTest.DTO.RefreshTokenDto;
 using WebApplicationTest.DTO.RegisterDto;
 using WebApplicationTest.Models;
@@ -20,25 +21,14 @@ namespace WebApplicationTest.Controllers
         private readonly ApplicationDbContext _dbContext;
         private readonly JwtService _jwtService;
         private readonly IConfiguration _configuration;
+        private readonly ExtractAccessTokenFromHeaderService _extractAccessTokenFromHeaderService;
 
-        public UsersController(ApplicationDbContext dbContext, JwtService jwtService, IConfiguration configuration)
+        public UsersController(ApplicationDbContext dbContext, JwtService jwtService, IConfiguration configuration, ExtractAccessTokenFromHeaderService extractAccessTokenFromHeaderService)
         {
             _dbContext = dbContext;
             _jwtService = jwtService;
             _configuration = configuration;
-        }
-
-        private string? ExtractAccessTokenFromHeader()
-        {
-            var authHeader = Request.Headers["Authorization"].FirstOrDefault();
-
-            if (string.IsNullOrEmpty(authHeader))
-                return null;
-
-            if (!authHeader.StartsWith("Bearer ", StringComparison.OrdinalIgnoreCase))
-                return null;
-
-            return authHeader.Substring("Bearer ".Length).Trim();
+            _extractAccessTokenFromHeaderService = extractAccessTokenFromHeaderService;
         }
 
         [HttpGet("get_users")]
@@ -84,7 +74,7 @@ namespace WebApplicationTest.Controllers
             User user = new User();
             user.Email = registerRequestDto.Email;
             user.FullName = registerRequestDto.FullName;
-            user.Password = HashingPassword.HashPassword(registerRequestDto.Password);
+            user.Password = HashingPasswordService.HashPassword(registerRequestDto.Password);
             _dbContext.Users.Add(user);
             await _dbContext.SaveChangesAsync();
 
@@ -95,56 +85,14 @@ namespace WebApplicationTest.Controllers
 
         }
 
-        [HttpPost("auth")]
-        public async Task<ActionResult<AuthResponseDto>> AuthUser([FromBody] AuthRequestDto authRequestDto)
+        [HttpPost("logout")]
+        [Authorize]
+        public async Task<ActionResult> LogoutUser()
         {
-            var user = _dbContext.Users.FirstOrDefault(user =>
-                user.Email.Equals(authRequestDto.Email));
-
-            if (user == null)
-            {
-                return BadRequest("Пользователя с таким email не существует!");
-            }
-            if (!HashingPassword.VerifyPassword(authRequestDto.Password, user.Password))
-            {
-                return BadRequest("Введен неверный пароль!");
-            }
-
-            var token = _jwtService.GenerateAccessToken(user);
-            var refreshToken = _jwtService.GenerateRefreshToken();
-            var hashedRefreshToken = HashingRefreshToken.HashRefreshToken(refreshToken);
-            var jwtSettings = _configuration.GetSection("Jwt");
-            var expiresInMinutes = Convert.ToInt32(jwtSettings["ExpireMinutes"]);
-
-            user.RefreshToken = hashedRefreshToken;
-            user.RefreshTokenExpiryTime = DateTime.UtcNow.AddDays(7);
-
-            await _dbContext.SaveChangesAsync();
-
-            AuthResponseDto authResponseDto = new AuthResponseDto
-            {
-                Email = user.Email,
-                FullName = user.FullName,
-                Token = token,
-                RefreshToken = refreshToken,
-                Expires = expiresInMinutes * 60
-            };
-            return Ok(authResponseDto);
-
-        }
-
-        [HttpPost("refresh")]
-        public async Task<ActionResult<RefreshTokenResponseDto>> RefreshToken([FromBody] RefreshTokenRequestDto refreshTokenRequestDto)
-        {
-            if (string.IsNullOrEmpty(refreshTokenRequestDto.RefreshToken))
-            {
-                return BadRequest("Refresh token не предоставлен!");
-            }
-
-            var accessToken = ExtractAccessTokenFromHeader();
+            var accessToken = _extractAccessTokenFromHeaderService.ExtractAccessTokenFromHeader(Request);
             if (string.IsNullOrEmpty(accessToken))
             {
-                return BadRequest("Попробуйте авторизироваться снова!");
+                return BadRequest("Попробуйте авторизироваться снова.");
             }
 
             var userId = _jwtService.GetUserIdFromToken(accessToken);
@@ -156,61 +104,56 @@ namespace WebApplicationTest.Controllers
             var user = await _dbContext.Users.FindAsync(userId);
             if (user == null)
             {
-                return BadRequest("Пользователь не найден");
+                return Unauthorized("Пользователь не найден. Попробуйте авторизоваться заново.");
             }
 
-            if (user.RefreshToken == null)
+            user.RefreshToken = null;
+            user.RefreshTokenExpiryTime = DateTime.MinValue;
+            await _dbContext.SaveChangesAsync();
+            return Ok("Вы успешно вышли из аккаунта.");
+
+        }
+
+        [HttpDelete("delete_profile")]
+        [Authorize]
+        public async Task<ActionResult> DeleteUser([FromBody] DeleteUserRequestDto deleteUserRequest)
+        {
+            var accessToken = _extractAccessTokenFromHeaderService.ExtractAccessTokenFromHeader(Request);
+            if (string.IsNullOrEmpty(accessToken))
             {
-                return BadRequest("Refresh token отсутствует у пользователя.");
+                return BadRequest("Попробуйте авторизироваться снова.");
             }
 
-            if (!HashingRefreshToken.VerifyRefreshToken(refreshTokenRequestDto.RefreshToken, user.RefreshToken))
+            var userId = _jwtService.GetUserIdFromToken(accessToken);
+            if (userId == null)
             {
-                return BadRequest("Недействительный refresh token");
+                return BadRequest("Недействительный access token.");
             }
 
-            if (user.RefreshTokenExpiryTime < DateTime.UtcNow)
+            var user = await _dbContext.Users.FindAsync(userId);
+            if (user == null)
             {
-                user.RefreshToken = null;
-                user.RefreshTokenExpiryTime = null;
+                return Unauthorized("Пользователь не найден. Попробуйте авторизоваться заново.");
+            }
+
+            if (HashingPasswordService.VerifyPassword(user.Password, deleteUserRequest.Password))
+            {
+                return BadRequest("Введен неверный пароль.");
+            }
+
+            if (deleteUserRequest.TypeDelete)
+            {
+                user.IsDeleted = true;
+                user.DeletedDate = DateTime.UtcNow;
                 await _dbContext.SaveChangesAsync();
 
-                return BadRequest("Срок действия refresh token истек.");
             }
-
-            var newAccessToken = _jwtService.GenerateAccessToken(user);
-            var newRefreshToken = _jwtService.GenerateRefreshToken();
-            var newHashedRefreshToken = HashingRefreshToken.HashRefreshToken(newRefreshToken);
-            user.RefreshToken = newHashedRefreshToken;
-            user.RefreshTokenExpiryTime = DateTime.UtcNow.AddDays(7);
+            _dbContext.Users.Attach(user);
+            _dbContext.Users.Remove(user);
 
             await _dbContext.SaveChangesAsync();
-
-            var jwtSetting = _configuration.GetSection("Jwt");
-            var expiresInMinutes = Convert.ToInt32(jwtSetting["ExpireMinutes"]);
-
-            RefreshTokenResponseDto refreshTokenResponseDto = new RefreshTokenResponseDto();
-            refreshTokenResponseDto.AccessToken = newAccessToken;
-            refreshTokenResponseDto.RefreshToken = newRefreshToken;
-            refreshTokenResponseDto.ExpiresIn = expiresInMinutes * 60;
-            return Ok(refreshTokenResponseDto);
-
-
-
-            //[HttpDelete("delete_user")]
-            //public async Task<ActionResult<>> DeleteUser([FromBody] User user)
-            //{
-            //    User oldItem = await _dbContext.Users.FindAsync(user.Id);
-            //    if (oldItem != null)
-            //    {
-            //        _dbContext.Users.Remove(oldItem);
-            //    }
-            //    await _dbContext.SaveChangesAsync();
-            //    return Ok();
-            //}
-
-            //[HttpPost]
-            //public async 
+            return Ok("Аккаунт успешно удален безвозвратно.");
+            
         }
     } 
 }

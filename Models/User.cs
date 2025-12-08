@@ -14,9 +14,10 @@ namespace WebApplicationTest.Models
         public string Password { get; set; }
         public string FullName { get; set; }
         public DateTime CreatedAt { get; set; } = DateTime.Now;
+        public List<Trip> Trips { get; set; }
+        public DateTime? DeletedDate { get; set; }
+        public Boolean IsDeleted { get; set; } = false;
         public string? RefreshToken { get; set; }
         public DateTime? RefreshTokenExpiryTime { get; set; }
-
-        public List<Trip> Trips { get; set; }
     }
 }

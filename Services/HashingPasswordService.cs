@@ -3,7 +3,7 @@
 namespace WebApplicationTest.Services
 
 {
-    public class HashingPassword
+    public class HashingPasswordService
     {
         public static string HashPassword(string password)
         {

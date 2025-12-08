@@ -77,6 +77,8 @@ namespace WebApplicationTest
                 });
 
             builder.Services.AddScoped<JwtService>();
+            builder.Services.AddHttpContextAccessor();
+            builder.Services.AddScoped<ExtractAccessTokenFromHeaderService>();
             var app = builder.Build();
 
             // Configure the HTTP request pipeline.
