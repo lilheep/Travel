@@ -65,9 +65,9 @@ namespace WebApplicationTest.Controllers
             return Ok(response);
         }
 
-        [HttpGet("get_user_trip_by_id")]
+        [HttpGet("get_user_travel/{id}")]
         [Authorize]
-        public async Task<ActionResult<List<GetUserTripByIdResponseDto>>> GetTripById([FromBody] GetUserTripByIdRequestDto getUserTripDto)
+        public async Task<ActionResult<GetUserTripByIdResponseDto>> GetTripById(int id)
         {
             var accessToken = _extractAccessTokenFromHeaderService.ExtractAccessTokenFromHeader(Request);
             if (string.IsNullOrEmpty(accessToken))
@@ -87,24 +87,164 @@ namespace WebApplicationTest.Controllers
                 return Unauthorized("Пользователь не найден. Попробуйте авторизоваться заново.");
             }
 
-            List<Trip> trips = await _dbContext.Trips.Where(u => u.Id == getUserTripDto.Id).ToListAsync();
-            if (trips == null)
+            var trip = await _dbContext.Trips
+                .FirstOrDefaultAsync(t => t.Id == id && t.UserId == userId);
+
+            if (trip == null)
             {
-                return BadRequest("У вас нет доступа к данной поездке.");
+                return NotFound("Поездка не найдена или у вас нет доступа к данной поездке.");
             }
-            List<GetUserTripByIdResponseDto> response  = new List<GetUserTripByIdResponseDto>();
-            trips.ForEach(trip =>
+
+            var responseDto = new GetUserTripByIdResponseDto
             {
-                GetUserTripByIdResponseDto responseDto = new GetUserTripByIdResponseDto();
-                responseDto.Id = trip.Id;
-                responseDto.Name = trip.Name;
-                responseDto.StartDate = trip.StartDate;
-                responseDto.EndDate = trip.EndDate;
-                responseDto.TotalBudget = trip.TotalBudget;
-                responseDto.Description = trip.Description;
-                response.Add(responseDto);
-            });
-            return Ok(response);
+                Id = trip.Id,
+                Name = trip.Name,
+                StartDate = trip.StartDate,
+                EndDate = trip.EndDate,
+                TotalBudget = trip.TotalBudget,
+                Description = trip.Description
+            };
+
+            return Ok(responseDto);
+        }
+
+        [HttpDelete("delete_trip/{id}")]
+        [Authorize]
+        public async Task<ActionResult> DeleteTrip(int id)
+        {
+            var accessToken = _extractAccessTokenFromHeaderService.ExtractAccessTokenFromHeader(Request);
+            if (string.IsNullOrEmpty(accessToken))
+            {
+                return BadRequest("Попробуйте авторизироваться снова.");
+            }
+
+            var userId = _jwtService.GetUserIdFromToken(accessToken);
+            if (userId == null)
+            {
+                return BadRequest("Недействительный access token.");
+            }
+
+            var user = await _dbContext.Users.FindAsync(userId);
+            if (user == null)
+            {
+                return Unauthorized("Пользователь не найден. Попробуйте авторизоваться заново.");
+            }
+
+            var trip = await _dbContext.Trips
+                .FirstOrDefaultAsync(t => t.Id == id && t.UserId == userId);
+
+            if (trip == null)
+            {
+                return NotFound("Поездка не найдена или у вас нет доступа к данной поездке.");
+            }
+
+            _dbContext.Trips.Remove(trip);
+            await _dbContext.SaveChangesAsync();
+
+            return Ok("Поездка успешно удалена.");
+        }
+
+        [HttpPut("update_trip/{id}")]
+        [Authorize]
+        public async Task<ActionResult<GetUserTripByIdResponseDto>> UpdateTrip(int id, [FromBody] UpdateTripRequestDto updateTripRequest)
+        {
+            var accessToken = _extractAccessTokenFromHeaderService.ExtractAccessTokenFromHeader(Request);
+            if (string.IsNullOrEmpty(accessToken))
+            {
+                return BadRequest("Попробуйте авторизироваться снова.");
+            }
+
+            var userId = _jwtService.GetUserIdFromToken(accessToken);
+            if (userId == null)
+            {
+                return BadRequest("Недействительный access token.");
+            }
+
+            var user = await _dbContext.Users.FindAsync(userId);
+            if (user == null)
+            {
+                return Unauthorized("Пользователь не найден. Попробуйте авторизоваться заново.");
+            }
+
+            if (updateTripRequest.Name == null &&
+                updateTripRequest.StartDate == null &&
+                updateTripRequest.EndDate == null &&
+                updateTripRequest.TotalBudget == null &&
+                updateTripRequest.Description == null)
+            {
+                return BadRequest("Нужно заполнить минимум одно из полей для обновления.");
+            }
+
+            var trip = await _dbContext.Trips
+                .FirstOrDefaultAsync(t => t.Id == id && t.UserId == userId);
+
+            if (trip == null)
+            {
+                return NotFound("Поездка не найдена или у вас нет доступа к данной поездке.");
+            }
+
+            bool hasChanges = false;
+
+            if (updateTripRequest.Name != null)
+            {
+                if (updateTripRequest.Name != trip.Name)
+                {
+                    trip.Name = updateTripRequest.Name;
+                    hasChanges = true;
+                }
+            }
+
+            if (updateTripRequest.StartDate.HasValue)
+            {
+                if (updateTripRequest.StartDate.Value != trip.StartDate)
+                {
+                    trip.StartDate = updateTripRequest.StartDate.Value;
+                    hasChanges = true;
+                }
+            }
+
+            if (updateTripRequest.EndDate.HasValue)
+            {
+                if (updateTripRequest.EndDate.Value != trip.EndDate)
+                {
+                    trip.EndDate = updateTripRequest.EndDate.Value;
+                    hasChanges = true;
+                }
+            }
+
+            if (updateTripRequest.TotalBudget.HasValue)
+            {
+                if (updateTripRequest.TotalBudget.Value != trip.TotalBudget)
+                {
+                    trip.TotalBudget = updateTripRequest.TotalBudget.Value;
+                    hasChanges = true;
+                }
+            }
+
+            if (updateTripRequest.Description != null)
+            {
+                if (updateTripRequest.Description != trip.Description)
+                {
+                    trip.Description = updateTripRequest.Description;
+                    hasChanges = true;
+                }
+            }
+
+            if (trip.EndDate < trip.StartDate)
+            {
+                return BadRequest("Дата окончания поездки не может быть раньше даты начала.");
+            }
+
+            if (hasChanges)
+            {
+                await _dbContext.SaveChangesAsync();
+            }
+            else
+            {
+                return Ok("Данные не были изменены (новые значения совпадают с текущими).");
+            }
+
+            return Ok("Данные о поездке успешно изменены!");
         }
 
         [HttpPost("create_trip")]

@@ -22,6 +22,7 @@
   </ItemGroup>
 
   <ItemGroup>
+    <Folder Include="DTO\ActivityDtos\" />
     <Folder Include="Image\" />
   </ItemGroup>
 
