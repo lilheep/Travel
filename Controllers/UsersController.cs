@@ -156,7 +156,7 @@ namespace WebApplicationTest.Controllers
             return Ok(userDtos);
         }
 
-        [HttpPost("change_password")]
+        [HttpPut("change_password")]
         [Authorize]
         public async Task<ActionResult> UserChangePassword([FromBody] UserChangePasswordRequestDto userChangePasswordRequest)
         {
@@ -192,7 +192,7 @@ namespace WebApplicationTest.Controllers
             await _dbContext.SaveChangesAsync();
             return Ok("Вы успешно изменили пароль!");
         }
-        [HttpPost("change_user_data")]
+        [HttpPut("change_user_data")]
         [Authorize]
         public async Task<ActionResult> ChangeUserNameOrEmail(UserChangeDataRequestDto userChangeDataRequest)
         {

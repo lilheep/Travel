@@ -1,8 +1,8 @@
-﻿using System.Text.Json.Serialization;
+using System.Text.Json.Serialization;
 
 namespace WebApplicationTest.DTO.TripsDtos
 {
-    public class CreateTripResponseDto
+    public class GetUserTripResponseDto
     {
         [JsonPropertyName("id")]
         public int Id { get; set; }

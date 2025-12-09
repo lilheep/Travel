@@ -1,6 +1,10 @@
-﻿using Microsoft.AspNetCore.Http;
+﻿using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
 using WebApplicationTest.Data;
+using WebApplicationTest.DTO.TripsDtos;
+using WebApplicationTest.Models;
 using WebApplicationTest.Services;
 
 namespace WebApplicationTest.Controllers
@@ -21,6 +25,123 @@ namespace WebApplicationTest.Controllers
             _extractAccessTokenFromHeaderService = extractAccessTokenFromHeaderService;
         }
 
-        
+        [HttpGet("get_user_trips")]
+        [Authorize]
+        public async Task<ActionResult<List<GetUserTripResponseDto>>> GetUserTrips()
+        {
+            var accessToken = _extractAccessTokenFromHeaderService.ExtractAccessTokenFromHeader(Request);
+            if (string.IsNullOrEmpty(accessToken))
+            {
+                return BadRequest("Попробуйте авторизироваться снова.");
+            }
+
+            var userId = _jwtService.GetUserIdFromToken(accessToken);
+            if (userId == null)
+            {
+                return BadRequest("Недействительный access token.");
+            }
+
+            var user = await _dbContext.Users.FindAsync(userId);
+            if (user == null)
+            {
+                return Unauthorized("Пользователь не найден. Попробуйте авторизоваться заново.");
+            }
+
+            List<Trip> trips = await _dbContext.Trips.Where(u => u.UserId == userId).ToListAsync();
+           
+            List<GetUserTripResponseDto> response = new List<GetUserTripResponseDto>();
+            trips.ForEach(trip =>
+            {
+                GetUserTripResponseDto responseDto = new GetUserTripResponseDto();
+                responseDto.Id = trip.Id;
+                responseDto.Name = trip.Name;
+                responseDto.StartDate = trip.StartDate;
+                responseDto.EndDate = trip.EndDate;
+                responseDto.TotalBudget = trip.TotalBudget;
+                responseDto.Description = trip.Description;
+                response.Add(responseDto);
+            });
+
+            return Ok(response);
+        }
+
+        [HttpGet("get_user_trip_by_id")]
+        [Authorize]
+        public async Task<ActionResult<List<GetUserTripByIdResponseDto>>> GetTripById([FromBody] GetUserTripByIdRequestDto getUserTripDto)
+        {
+            var accessToken = _extractAccessTokenFromHeaderService.ExtractAccessTokenFromHeader(Request);
+            if (string.IsNullOrEmpty(accessToken))
+            {
+                return BadRequest("Попробуйте авторизироваться снова.");
+            }
+
+            var userId = _jwtService.GetUserIdFromToken(accessToken);
+            if (userId == null)
+            {
+                return BadRequest("Недействительный access token.");
+            }
+
+            var user = await _dbContext.Users.FindAsync(userId);
+            if (user == null)
+            {
+                return Unauthorized("Пользователь не найден. Попробуйте авторизоваться заново.");
+            }
+
+            List<Trip> trips = await _dbContext.Trips.Where(u => u.Id == getUserTripDto.Id).ToListAsync();
+            if (trips == null)
+            {
+                return BadRequest("У вас нет доступа к данной поездке.");
+            }
+            List<GetUserTripByIdResponseDto> response  = new List<GetUserTripByIdResponseDto>();
+            trips.ForEach(trip =>
+            {
+                GetUserTripByIdResponseDto responseDto = new GetUserTripByIdResponseDto();
+                responseDto.Id = trip.Id;
+                responseDto.Name = trip.Name;
+                responseDto.StartDate = trip.StartDate;
+                responseDto.EndDate = trip.EndDate;
+                responseDto.TotalBudget = trip.TotalBudget;
+                responseDto.Description = trip.Description;
+                response.Add(responseDto);
+            });
+            return Ok(response);
+        }
+
+        [HttpPost("create_trip")]
+        [Authorize]
+        public async Task<ActionResult> CreateTrip([FromBody] CreateTripRequestDto createTripRequestDto)
+            {
+                var accessToken = _extractAccessTokenFromHeaderService.ExtractAccessTokenFromHeader(Request);
+                if (string.IsNullOrEmpty(accessToken))
+                {
+                    return BadRequest("Попробуйте авторизироваться снова.");
+                }
+
+                var userId = _jwtService.GetUserIdFromToken(accessToken);
+                if (userId == null)
+                {
+                    return BadRequest("Недействительный access token.");
+                }
+
+                var user = await _dbContext.Users.FindAsync(userId);
+                if (user == null)
+                {
+                    return Unauthorized("Пользователь не найден. Попробуйте авторизоваться заново.");
+                }
+
+                Trip trip = new Trip();
+                trip.UserId = (int)userId;
+                trip.User = user;
+                trip.Name = createTripRequestDto.Name;
+                trip.StartDate = createTripRequestDto.StartDate;
+                trip.EndDate = createTripRequestDto.EndDate;
+                trip.TotalBudget = (decimal)createTripRequestDto.TotalBudget;
+                trip.Description = createTripRequestDto.Description;
+                _dbContext.Add(trip);
+                await _dbContext.SaveChangesAsync();
+                return Ok("Поездка успешно создана!");
+            }
+
+   
     }
 }
