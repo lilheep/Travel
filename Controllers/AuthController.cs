@@ -29,6 +29,34 @@ namespace WebApplicationTest.Controllers
             _extractAccessTokenFromHeaderService = extractAccessTokenFromHeaderService;
         }
 
+        [HttpPost("register")]
+        public async Task<ActionResult<RegisterResponseDto>> RegisterUser([FromBody] RegisterRequestDto registerRequestDto)
+        {
+            if (!registerRequestDto.Password.Equals(registerRequestDto.PasswordConfrim))
+            {
+                return BadRequest("Пароли не совпадают!");
+            }
+
+            if (_dbContext.Users.FirstOrDefault(user =>
+                user.Email.Equals(registerRequestDto.Email)) != null)
+            {
+                return BadRequest("Пользователь с таким email уже существует!");
+            }
+
+            User user = new User();
+            user.Email = registerRequestDto.Email;
+            user.FullName = registerRequestDto.FullName;
+            user.Password = HashingPasswordService.HashPassword(registerRequestDto.Password);
+            _dbContext.Users.Add(user);
+            await _dbContext.SaveChangesAsync();
+
+            RegisterResponseDto registerResponseDto = new RegisterResponseDto();
+            registerResponseDto.UserId = user.Id;
+
+            return Ok(registerResponseDto);
+
+        }
+
         [HttpPost("auth")]
         public async Task<ActionResult<AuthResponseDto>> AuthUser([FromBody] AuthRequestDto authRequestDto)
         {

@@ -52,34 +52,6 @@ namespace WebApplicationTest.Controllers
             return Ok(userDtos);
         }
 
-        [HttpPost("register")]
-        public async Task<ActionResult<RegisterResponseDto>> RegisterUser([FromBody] RegisterRequestDto registerRequestDto)
-        {
-            if (!registerRequestDto.Password.Equals(registerRequestDto.PasswordConfrim))
-            {
-                return BadRequest("Пароли не совпадают!");
-            }
-
-            if (_dbContext.Users.FirstOrDefault(user =>
-                user.Email.Equals(registerRequestDto.Email)) != null)
-            {
-                return BadRequest("Пользователь с таким email уже существует!");
-            }
-
-            User user = new User();
-            user.Email = registerRequestDto.Email;
-            user.FullName = registerRequestDto.FullName;
-            user.Password = HashingPasswordService.HashPassword(registerRequestDto.Password);
-            _dbContext.Users.Add(user);
-            await _dbContext.SaveChangesAsync();
-
-            RegisterResponseDto registerResponseDto = new RegisterResponseDto();
-            registerResponseDto.UserId = user.Id;
-
-            return Ok(registerResponseDto);
-
-        }
-
         [HttpPost("logout")]
         [Authorize]
         public async Task<ActionResult> LogoutUser()
@@ -222,7 +194,7 @@ namespace WebApplicationTest.Controllers
         }
         [HttpPost("change_user_data")]
         [Authorize]
-        public async Task<ActionResult<UserChangeDataResponseDto>> ChangeUserNameOrEmail(UserChangeDataRequestDto userChangeDataRequest)
+        public async Task<ActionResult> ChangeUserNameOrEmail(UserChangeDataRequestDto userChangeDataRequest)
         {
             var accessToken = _extractAccessTokenFromHeaderService.ExtractAccessTokenFromHeader(Request);
             if (string.IsNullOrEmpty(accessToken))
@@ -247,14 +219,43 @@ namespace WebApplicationTest.Controllers
                 return BadRequest("Введен неверный пароль.");
             }
 
+            //user.Email = userChangeDataRequest.Email;
+            //user.FullName = userChangeDataRequest.FullName;
+            //await _dbContext.SaveChangesAsync();
+
+            if (userChangeDataRequest.Email == null && userChangeDataRequest.FullName == null)
+            {
+                return BadRequest("Нужно заполнить минимум одно из полей.");
+            }
+
+            if (userChangeDataRequest.Email == null)
+            {
+                user.FullName = userChangeDataRequest.FullName;
+            }
+
+            if (userChangeDataRequest.FullName == null)
+            {
+                if (userChangeDataRequest.Email == user.Email)
+                {
+                    return BadRequest("Новый адрес электронной почты совпадает с текущим.");
+                }
+                
+                if (_dbContext.Users.FirstOrDefault(user =>
+                    user.Email.Equals(userChangeDataRequest.Email)) != null)
+                {
+                    return BadRequest("Пользователь с таким email уже существует!");
+                }
+
+                user.Email = userChangeDataRequest.Email;
+            }
+
             user.Email = userChangeDataRequest.Email;
             user.FullName = userChangeDataRequest.FullName;
+
             await _dbContext.SaveChangesAsync();
 
-            UserChangeDataResponseDto userChangeDataResponse = new UserChangeDataResponseDto();
-            userChangeDataResponse.Email = user.Email;
-            userChangeDataResponse.FullName = user.FullName;
-            return Ok(userChangeDataResponse);
+
+            return Ok("Данные успешено обновлены!");
         }  
         
     }
