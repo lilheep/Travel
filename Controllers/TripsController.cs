@@ -146,7 +146,7 @@ namespace WebApplicationTest.Controllers
 
         [HttpPut("update_trip/{id}")]
         [Authorize]
-        public async Task<ActionResult<GetUserTripByIdResponseDto>> UpdateTrip(int id, [FromBody] UpdateTripRequestDto updateTripRequest)
+        public async Task<ActionResult> UpdateTrip(int id, [FromBody] UpdateTripRequestDto updateTripRequest)
         {
             var accessToken = _extractAccessTokenFromHeaderService.ExtractAccessTokenFromHeader(Request);
             if (string.IsNullOrEmpty(accessToken))
