@@ -32,55 +32,6 @@ namespace WebApplicationTest.Controllers
             _extractAccessTokenFromHeaderService = extractAccessTokenFromHeaderService;
         }
 
-        [HttpGet("get_users")]
-        [Authorize]
-        public async Task<ActionResult<List<UserDto>>> GetUsers()
-        {
-            List<User> users = await _dbContext.Users.ToListAsync();
-            List<UserDto> userDtos = new List<UserDto>();
-            users.ForEach(user =>
-            {
-                UserDto userDto = new UserDto();
-                userDto.Id = user.Id;
-                userDto.Trips = user.Trips;
-                userDto.Email = user.Email;
-                userDto.CreatedAt = user.CreatedAt;
-                userDto.FullName = user.FullName;
-                userDtos.Add(userDto);
-            }
-            );
-            return Ok(userDtos);
-        }
-
-        [HttpPost("logout")]
-        [Authorize]
-        public async Task<ActionResult> LogoutUser()
-        {
-            var accessToken = _extractAccessTokenFromHeaderService.ExtractAccessTokenFromHeader(Request);
-            if (string.IsNullOrEmpty(accessToken))
-            {
-                return BadRequest("Попробуйте авторизироваться снова.");
-            }
-
-            var userId = _jwtService.GetUserIdFromToken(accessToken);
-            if (userId == null)
-            {
-                return BadRequest("Недействительный access token.");
-            }
-
-            var user = await _dbContext.Users.FindAsync(userId);
-            if (user == null)
-            {
-                return Unauthorized("Пользователь не найден. Попробуйте авторизоваться заново.");
-            }
-
-            user.RefreshToken = null;
-            user.RefreshTokenExpiryTime = DateTime.MinValue;
-            await _dbContext.SaveChangesAsync();
-            return Ok("Вы успешно вышли из аккаунта.");
-
-        }
-
         [HttpDelete("delete_profile")]
         [Authorize]
         public async Task<ActionResult> DeleteUser([FromBody] DeleteUserRequestDto deleteUserRequest)

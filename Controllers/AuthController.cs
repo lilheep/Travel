@@ -157,6 +157,36 @@ namespace WebApplicationTest.Controllers
             refreshTokenResponseDto.ExpiresIn = expiresInMinutes * 60;
             return Ok(refreshTokenResponseDto);
         }
+
+        [HttpPost("logout")]
+        [Authorize]
+        public async Task<ActionResult> LogoutUser()
+        {
+            var accessToken = _extractAccessTokenFromHeaderService.ExtractAccessTokenFromHeader(Request);
+            if (string.IsNullOrEmpty(accessToken))
+            {
+                return BadRequest("Попробуйте авторизироваться снова.");
+            }
+
+            var userId = _jwtService.GetUserIdFromToken(accessToken);
+            if (userId == null)
+            {
+                return BadRequest("Недействительный access token.");
+            }
+
+            var user = await _dbContext.Users.FindAsync(userId);
+            if (user == null)
+            {
+                return Unauthorized("Пользователь не найден. Попробуйте авторизоваться заново.");
+            }
+
+            user.RefreshToken = null;
+            user.RefreshTokenExpiryTime = DateTime.MinValue;
+            await _dbContext.SaveChangesAsync();
+            return Ok("Вы успешно вышли из аккаунта.");
+
+        }
     }
+
 }
 
